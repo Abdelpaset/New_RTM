@@ -92,7 +92,7 @@ fun TicketManagerApp(api: RayaApi) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
-    var email by remember { mutableStateOf("engineer@raya.com") }
+    var email by remember { mutableStateOf("engineer@rayacorp.com") }
     var password by remember { mutableStateOf("") }
     var isLoggedIn by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
