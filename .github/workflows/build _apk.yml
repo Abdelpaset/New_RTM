@@ -1,0 +1,52 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.12.1'
+
+      - name: Install Android 35 SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Ensure file_paths.xml exists
+        run: |
+          mkdir -p app/src/main/res/xml
+          cat << 'XML_EOF' > app/src/main/res/xml/file_paths.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <cache-path name="shared" path="." />
+              <external-cache-path name="external_shared" path="." />
+          </paths>
+          XML_EOF
+
+      - name: Build debug APK
+        run: gradle --no-daemon :app:assembleDebug -PversionCode=${{ github.run_number }} -PversionName="1.0.${{ github.run_number }}"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RayaTicketManager-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
