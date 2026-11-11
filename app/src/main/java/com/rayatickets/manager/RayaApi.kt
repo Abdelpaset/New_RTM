@@ -3,6 +3,7 @@ package com.rayatickets.manager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -20,7 +21,6 @@ class RayaApi {
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
 
-    // In-memory cookie store (no external cookie-jar dependency required)
     private val cookieStore = mutableMapOf<String, Cookie>()
 
     private val client = OkHttpClient.Builder()
@@ -75,7 +75,6 @@ class RayaApi {
 
     suspend fun login(email: String, pass: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
-            // Step 1: GET /login to fetch CSRF cookie
             val initRequest = Request.Builder()
                 .url("$BASE_URL/login")
                 .get()
@@ -89,7 +88,6 @@ class RayaApi {
             val csrfToken = getCsrfToken()
                 ?: return@withContext Result.failure(IOException("CSRF cookie not received from server."))
 
-            // Step 2: POST /api/auth/login
             val jsonBody = JSONObject().apply {
                 put("email", email)
                 put("password", pass)
@@ -153,8 +151,7 @@ class RayaApi {
             }
 
             while (true) {
-                val urlBuilder = HttpUrl.parse("$BASE_URL/api/tickets")?.newBuilder()
-                    
+                val urlBuilder = "$BASE_URL/api/tickets".toHttpUrl().newBuilder()
 
                 urlBuilder.addQueryParameter("q", "")
                 urlBuilder.addQueryParameter("perPage", perPage.toString())
