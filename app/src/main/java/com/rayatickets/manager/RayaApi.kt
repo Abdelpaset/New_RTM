@@ -73,6 +73,14 @@ class RayaApi {
         }
     }
 
+    fun logout() {
+        synchronized(cookieStore) {
+            cookieStore.clear()
+        }
+        currentUserEmail = null
+        currentUserName = null
+    }
+
     suspend fun login(email: String, pass: String): Result<Boolean> = withContext(Dispatchers.IO) {
         try {
             val initRequest = Request.Builder()
@@ -123,8 +131,7 @@ class RayaApi {
         startDate: LocalDate,
         endDate: LocalDate,
         isPendingOnly: Boolean = false,
-        isResolvedOnly: Boolean = false,
-        leaderId: Int? = 131
+        isResolvedOnly: Boolean = false
     ): Result<List<Ticket>> = withContext(Dispatchers.IO) {
         try {
             val allTickets = mutableListOf<Ticket>()
@@ -139,9 +146,6 @@ class RayaApi {
                     put(startIso)
                     put(endIso)
                 })
-                if (leaderId != null) {
-                    put("leader_id", leaderId)
-                }
                 if (isPendingOnly && !isResolvedOnly) {
                     put("is_closed", 0)
                     put("status_id", 1)

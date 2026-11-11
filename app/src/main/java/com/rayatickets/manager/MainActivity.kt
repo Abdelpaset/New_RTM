@@ -1,5 +1,6 @@
 package com.rayatickets.manager
 
+import android.app.DatePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -27,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -117,8 +119,7 @@ fun TicketManagerApp(api: RayaApi) {
                 startDate = startDate,
                 endDate = endDate,
                 isPendingOnly = isPendingSelected && !isResolvedSelected,
-                isResolvedOnly = isResolvedSelected && !isPendingSelected,
-                leaderId = 131
+                isResolvedOnly = isResolvedSelected && !isPendingSelected
             )
             isLoading = false
             result.onSuccess { list ->
@@ -127,6 +128,18 @@ fun TicketManagerApp(api: RayaApi) {
                 errorMessage = err.message ?: "Failed to fetch tickets"
             }
         }
+    }
+
+    val showDatePicker = { currentDate: LocalDate, onSelected: (LocalDate) -> Unit ->
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                onSelected(LocalDate.of(year, month + 1, dayOfMonth))
+            },
+            currentDate.year,
+            currentDate.monthValue - 1,
+            currentDate.dayOfMonth
+        ).show()
     }
 
     val filteredTickets = remember(tickets, searchQuery, selectedType, selectedAssignee, isPendingSelected, isResolvedSelected) {
@@ -151,7 +164,6 @@ fun TicketManagerApp(api: RayaApi) {
         }
     }
 
-    // Safely render bitmap ONLY when filteredTickets.size < 70 to completely prevent app crash and memory exhaustion
     LaunchedEffect(filteredTickets) {
         if (filteredTickets.isNotEmpty() && filteredTickets.size < 70) {
             withContext(Dispatchers.Default) {
@@ -178,24 +190,28 @@ fun TicketManagerApp(api: RayaApi) {
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = api.currentUserName ?: "Raya Tickets",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "ATM Field Operations",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = api.currentUserName ?: "Raya Tickets",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 },
                 actions = {
                     if (isLoggedIn) {
-                        IconButton(onClick = { refreshTickets() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Sync", tint = MaterialTheme.colorScheme.primary)
+                        IconButton(
+                            onClick = {
+                                api.logout()
+                                isLoggedIn = false
+                                tickets = emptyList()
+                                tableBitmap = null
+                            }
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Logout",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 },
@@ -235,15 +251,31 @@ fun TicketManagerApp(api: RayaApi) {
                     }
                 )
             } else {
-                ControlsCard(
+                ControlsSection(
                     startDate = startDate,
                     endDate = endDate,
-                    onStartDateChange = { startDate = it; refreshTickets() },
-                    onEndDateChange = { endDate = it; refreshTickets() },
+                    onPickStartDate = {
+                        showDatePicker(startDate) { newDate ->
+                            startDate = newDate
+                            refreshTickets()
+                        }
+                    },
+                    onPickEndDate = {
+                        showDatePicker(endDate) { newDate ->
+                            endDate = newDate
+                            refreshTickets()
+                        }
+                    },
                     isPendingSelected = isPendingSelected,
-                    onPendingToggle = { isPendingSelected = !isPendingSelected },
+                    onPendingToggle = {
+                        isPendingSelected = !isPendingSelected
+                        refreshTickets()
+                    },
                     isResolvedSelected = isResolvedSelected,
-                    onResolvedToggle = { isResolvedSelected = !isResolvedSelected }
+                    onResolvedToggle = {
+                        isResolvedSelected = !isResolvedSelected
+                        refreshTickets()
+                    }
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -282,7 +314,6 @@ fun TicketManagerApp(api: RayaApi) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Condition: Show Table Image preview ONLY when tickets are less than 70
                 if (filteredTickets.size in 1..69) {
                     tableBitmap?.let { bmp ->
                         TablePreviewCard(
@@ -306,6 +337,10 @@ fun TicketManagerApp(api: RayaApi) {
                                 val caption = "تذاكر العمل (${filteredTickets.size}) - ${selectedAssignee ?: "الفريق"}"
                                 shareToWhatsAppDirect(context, uri, selectedAssigneePhone, caption)
                             },
+                            onSave = {
+                                val file = TableImage.saveBitmapToFile(context, bmp)
+                                Toast.makeText(context, "Saved to ${file.name}", Toast.LENGTH_SHORT).show()
+                            },
                             onExportCsv = {
                                 val csvFile = TableImage.exportToCsv(context, filteredTickets)
                                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", csvFile)
@@ -320,7 +355,6 @@ fun TicketManagerApp(api: RayaApi) {
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 } else if (filteredTickets.size >= 70) {
-                    // Safe Mode Notice Card for 70+ tickets (prevents OOM / app crash)
                     LargeTicketNoticeCard(
                         ticketCount = filteredTickets.size,
                         onExportCsv = {
@@ -440,11 +474,11 @@ fun FilterPillsRow(
 }
 
 @Composable
-fun ControlsCard(
+fun ControlsSection(
     startDate: LocalDate,
     endDate: LocalDate,
-    onStartDateChange: (LocalDate) -> Unit,
-    onEndDateChange: (LocalDate) -> Unit,
+    onPickStartDate: () -> Unit,
+    onPickEndDate: () -> Unit,
     isPendingSelected: Boolean,
     onPendingToggle: () -> Unit,
     isResolvedSelected: Boolean,
@@ -455,50 +489,59 @@ fun ControlsCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1.1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 OutlinedButton(
-                    onClick = { /* Date selection */ },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
+                    onClick = onPickStartDate,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    Text(startDate.format(DateTimeFormatter.ISO_LOCAL_DATE), fontSize = 12.sp)
+                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("From: ${startDate.format(DateTimeFormatter.ISO_LOCAL_DATE)}", fontSize = 11.sp)
                 }
+
                 OutlinedButton(
-                    onClick = { /* Date selection */ },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
+                    onClick = onPickEndDate,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    Text(endDate.format(DateTimeFormatter.ISO_LOCAL_DATE), fontSize = 12.sp)
+                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("To:   ${endDate.format(DateTimeFormatter.ISO_LOCAL_DATE)}", fontSize = 11.sp)
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier.weight(0.9f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 FilterChip(
                     selected = isPendingSelected,
                     onClick = onPendingToggle,
-                    label = { Text("Pending", fontSize = 12.sp) },
+                    label = { Text("Pending", fontSize = 11.sp) },
                     leadingIcon = {
-                        if (isPendingSelected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        if (isPendingSelected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
                 FilterChip(
                     selected = isResolvedSelected,
                     onClick = onResolvedToggle,
-                    label = { Text("Resolved", fontSize = 12.sp) },
+                    label = { Text("Resolved", fontSize = 11.sp) },
                     leadingIcon = {
-                        if (isResolvedSelected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        if (isResolvedSelected) Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
                     },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -539,7 +582,7 @@ fun LargeTicketNoticeCard(
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "معاينة الصورة متوقفة تلقائياً لأن عدد التذاكر ($ticketCount) يتجاوز 70 تذكرة لحماية التطبيق من الإغلاق المفاجئ واستهلاك الذاكرة. يمكنك تحميلها كـ CSV أو الفلترة حسب المهندس.",
+                text = "معاينة الصورة متوقفة تلقائياً لأن عدد التذاكر ($ticketCount) يتجاوز 70 تذكرة لحماية التطبيق من الإغلاق المفاجئ. يمكنك تحميلها كـ CSV أو الفلترة حسب المهندس.",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -555,6 +598,7 @@ fun TablePreviewCard(
     assigneePhone: String?,
     onShareGeneral: () -> Unit,
     onShareWhatsApp: () -> Unit,
+    onSave: () -> Unit,
     onExportCsv: () -> Unit
 ) {
     Card(
@@ -574,37 +618,68 @@ fun TablePreviewCard(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // WhatsApp direct share button when assignee is selected
-                    if (!selectedAssignee.isNullOrBlank()) {
-                        Button(
-                            onClick = onShareWhatsApp,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("WhatsApp", fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick = onShareGeneral,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                if (!selectedAssignee.isNullOrBlank()) {
+                    Surface(
+                        color = Color(0xFF1E293B),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Share", fontSize = 11.sp)
+                        Text(
+                            text = selectedAssignee,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
                     }
+                }
+            }
 
-                    FilledTonalButton(
-                        onClick = onExportCsv,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (!selectedAssignee.isNullOrBlank()) {
+                    Button(
+                        onClick = onShareWhatsApp,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("CSV", fontSize = 11.sp)
+                        Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.White)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("WhatsApp", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
+                }
+
+                FilledTonalButton(
+                    onClick = onShareGeneral,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Share", fontSize = 10.sp)
+                }
+
+                FilledTonalButton(
+                    onClick = onSave,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Save", fontSize = 10.sp)
+                }
+
+                FilledTonalButton(
+                    onClick = onExportCsv,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("CSV", fontSize = 10.sp)
                 }
             }
 
@@ -615,7 +690,7 @@ fun TablePreviewCard(
                 contentDescription = "Table Preview",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 200.dp)
+                    .heightIn(max = 220.dp)
                     .clip(RoundedCornerShape(8.dp))
             )
         }
