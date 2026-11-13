@@ -1,5 +1,4 @@
 package com.rayatickets.manager
-package com.rayatickets.manager
 
 import android.app.DatePickerDialog
 import android.content.ClipData
