@@ -414,7 +414,7 @@ fun TicketManagerApp(api: RayaApi) {
                                     isLeaderMenuOpen = false
                                 }
                             )
-                            availableLeaders.forEach { leaderName ->
+                            for (leaderName in availableLeaders) {
                                 DropdownMenuItem(
                                     text = { Text(leaderName) },
                                     onClick = {
