@@ -5,31 +5,39 @@ import org.json.JSONObject
 
 data class Ticket(
     val id: Long = 0,
-    val ticketNumber: String = "",
+    val serial: String = "",
     val bank: String = "",
     val siteName: String = "",
-    val machineSerial: String = "",
+    val atmId: String = "",
+    val atmModel: String = "",
     val status: String = "",
+    val subStatus: String = "",
     val statusId: Int = 0,
     val type: String = "",
+    val subType: String = "",
     val typeId: Int = 0,
     val assignee: String = "",
     val displayAssignee: String = "",
+    val leader: String = "",
+    val displayLeader: String = "",
     val startTime: String = "",
-    val updatedAt: String = "",
-    val comment: String = "",
+    val createdAt: String = "",
+    val description: String = "",
     val isClosed: Boolean = false
 ) {
     val isPending: Boolean
         get() = statusId == 1 || status.equals("pending", ignoreCase = true) || !isClosed
 
     val isResolved: Boolean
-        get() = statusId == 4 || status.equals("resolved", ignoreCase = true) || 
+        get() = statusId == 4 || status.equals("resolved", ignoreCase = true) ||
                 statusId == 20 || status.equals("solved by phone", ignoreCase = true) || isClosed
+
+    val fullStatusText: String
+        get() = if (subStatus.isNotBlank()) "$status · $subStatus" else status
 }
 
 object TicketParser {
-    val standardCallTypes = listOf("call", "Call Back", "Customer Request", "PM", "Installation")
+    val standardCallTypes = listOf("Call", "PM", "Customer Request", "Installation")
 
     private val titleRegex = """^(Eng\.?|م\.?|المهندس)\s*""".toRegex(RegexOption.IGNORE_CASE)
     private val spacesRegex = """\s+""".toRegex()
@@ -58,53 +66,66 @@ object TicketParser {
             for (i in 0 until dataArray.length()) {
                 val obj = dataArray.getJSONObject(i)
                 val id = obj.optLong("id", 0L)
-                val ticketNum = obj.optString("ticket", obj.optString("ticket_number", id.toString()))
-
-                val bankObj = obj.optJSONObject("bank")
-                val bank = bankObj?.optString("name") ?: obj.optString("bank", "")
+                val serial = obj.optString("serial", obj.optString("ticket", id.toString()))
 
                 val machineObj = obj.optJSONObject("machine")
-                val siteName = machineObj?.optString("name") 
-                    ?: obj.optString("site_name", obj.optString("site", ""))
-                val machineSerial = machineObj?.optString("serial_number")
-                    ?: machineObj?.optString("terminal_id")
-                    ?: obj.optString("machine", obj.optString("terminal_id", ""))
+                val bankObj = machineObj?.optJSONObject("bank") ?: obj.optJSONObject("bank")
+                val bank = bankObj?.optString("abberv", bankObj.optString("name", obj.optString("bank", "")))
+
+                val siteName = machineObj?.optString("site_name", obj.optString("site_name", ""))
+                val atmId = machineObj?.optString("atm_id", obj.optString("atm_id", ""))
+                val atmModel = machineObj?.optString("atm_model", "")
 
                 val statusObj = obj.optJSONObject("status")
-                val statusName = statusObj?.optString("name") ?: obj.optString("status", "")
+                val statusName = statusObj?.optString("name", obj.optString("status", ""))
+                val subStatusObj = obj.optJSONObject("subStatus")
+                val subStatusName = subStatusObj?.optString("name", obj.optString("sub_status", ""))
+
                 val fallbackStatusId = statusObj?.optInt("id") ?: 0
                 val statusId = if (obj.has("status_id")) obj.optInt("status_id") else fallbackStatusId
 
                 val typeObj = obj.optJSONObject("type")
-                val typeName = typeObj?.optString("name") ?: obj.optString("type", "")
+                val typeName = typeObj?.optString("name", obj.optString("type", ""))
+                val subTypeObj = obj.optJSONObject("subType")
+                val subTypeName = subTypeObj?.optString("name", "")
+
                 val fallbackTypeId = typeObj?.optInt("id") ?: 0
                 val typeId = if (obj.has("type_id")) obj.optInt("type_id") else fallbackTypeId
 
-                val userObj = obj.optJSONObject("user") ?: obj.optJSONObject("assignee")
-                val rawAssignee = userObj?.optString("name") ?: obj.optString("assignee", "")
+                val userObj = obj.optJSONObject("assignee") ?: obj.optJSONObject("user")
+                val rawAssignee = userObj?.optString("full_name", userObj?.optString("name", obj.optString("assignee", "")))
                 val displayAssignee = cleanAssigneeName(rawAssignee)
 
-                val startTime = obj.optString("start_time", obj.optString("created_at", ""))
-                val updatedAt = obj.optString("updated_at", "")
-                val comment = obj.optString("comment", obj.optString("description", ""))
+                val leaderObj = obj.optJSONObject("leader") ?: userObj?.optJSONObject("leader")
+                val rawLeader = leaderObj?.optString("full_name", leaderObj?.optString("name", obj.optString("leader", "")))
+                val displayLeader = cleanAssigneeName(rawLeader)
+
+                val startTime = obj.optString("start_time", "")
+                val createdAt = obj.optString("created_at", "")
+                val description = obj.optString("description", "")
                 val isClosed = obj.optInt("is_closed", if (statusId == 4 || statusId == 20) 1 else 0) == 1
 
                 list.add(
                     Ticket(
                         id = id,
-                        ticketNumber = ticketNum,
+                        serial = serial,
                         bank = bank,
                         siteName = siteName,
-                        machineSerial = machineSerial,
+                        atmId = atmId,
+                        atmModel = atmModel,
                         status = statusName,
+                        subStatus = subStatusName,
                         statusId = statusId,
                         type = typeName,
+                        subType = subTypeName,
                         typeId = typeId,
                         assignee = rawAssignee,
                         displayAssignee = displayAssignee,
+                        leader = rawLeader,
+                        displayLeader = displayLeader,
                         startTime = startTime,
-                        updatedAt = updatedAt,
-                        comment = comment,
+                        createdAt = createdAt,
+                        description = description,
                         isClosed = isClosed
                     )
                 )
