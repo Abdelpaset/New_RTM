@@ -70,7 +70,7 @@ object TableImage {
 
             val timeDisplay = if (t.startTime.length >= 16) t.startTime.substring(11, 16) else t.startTime
             val rowData = arrayOf(
-                "#${t.ticketNumber}",
+                "#${t.serial}",
                 t.bank,
                 t.siteName,
                 t.status,
@@ -129,20 +129,20 @@ object TableImage {
         val file = File(dir, "raya_tickets_${LocalDate.now()}.csv")
         file.bufferedWriter(Charsets.UTF_8).use { writer ->
             writer.write("\uFEFF")
-            writer.write("Ticket,Bank,Site Name,Machine Serial,Status,Type,Assignee,Start Time,Updated At,Comment\n")
+            writer.write("Ticket,Bank,Site Name,ATM ID,Status,Type,Assignee,Start Time,Created At,Description\n")
             for (t in tickets) {
-                val cleanComment = t.comment.replace("\n", " ").replace("\r", " ").replace(",", ";")
+                val cleanDesc = t.description.replace("\n", " ").replace("\r", " ").replace(",", ";")
                 val cells = listOf(
-                    t.ticketNumber,
+                    t.serial,
                     t.bank,
                     t.siteName,
-                    t.machineSerial,
+                    t.atmId,
                     t.status,
                     t.type,
                     t.displayAssignee,
                     t.startTime,
-                    t.updatedAt,
-                    cleanComment
+                    t.createdAt,
+                    cleanDesc
                 )
                 val line = cells.joinToString(",") { cell ->
                     val escaped = cell.replace("\"", "\"\"")
